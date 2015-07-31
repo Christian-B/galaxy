@@ -212,7 +212,7 @@ class JobHandlerQueue( object ):
                 .join(model.LibraryDatasetDatasetAssociation) \
                 .join(model.Dataset) \
                 .filter(and_((model.Job.state == model.Job.states.NEW),
-                        or_((model.LibraryDatasetDatasetAssociation._state is not None),
+                        or_((model.LibraryDatasetDatasetAssociation._state != null()),
                             (model.LibraryDatasetDatasetAssociation.deleted == true()),
                             (model.Dataset.state != model.Dataset.states.OK),
                             (model.Dataset.deleted == true())))).subquery()
@@ -446,7 +446,7 @@ class JobHandlerQueue( object ):
                                             .where(and_(model.Job.table.c.state.in_((model.Job.states.QUEUED,
                                                                                      model.Job.states.RUNNING,
                                                                                      model.Job.states.RESUBMITTED)),
-                                                        (model.Job.table.c.user_id is not None)))
+                                                        (model.Job.table.c.user_id != null())))
                                             .group_by(model.Job.table.c.user_id))
             for row in query:
                 self.user_job_count[row[0]] = row[1]
