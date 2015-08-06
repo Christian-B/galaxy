@@ -119,3 +119,7 @@ doc/build
 *.rej
 *~
 
+#Extra for Christian
+dependency_dir
+tool-data/toolshed.g2.bx.psu.edu
+tools/brenninc
