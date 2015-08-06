@@ -146,11 +146,16 @@
     <tool file="brenninc/frequency/frequency.xml" />
     <tool file="brenninc/fasta/fasta_summary.xml" />
     <tool file="brenninc/fasta/fastq_summary.xml" />
+    <tool file="brenninc/sam_splitter/sam_splitter.xml" />
  </section>
   <section name="Christian's Tests" id="test">
     <tool file="brenninc/guitest/guitest.xml" />
     <tool file="brenninc/bugtest/galaxy_boolean_test_issue2.xml" />
     <tool file="brenninc/bugtest/galaxy_boolean_test_issue_Christian.xml" />
     <tool file="brenninc/htseq_count/htseq-count2.xml" />    
+    <tool file="brenninc/test/multi_output.xml" />
+    <tool file="brenninc/test/multi_output_assign_primary.xml" />
+    <tool file="brenninc/test/multi_output_configured.xml" />
+    <tool file="brenninc/test/sam_copy.xml" />
  </section>
 </toolbox>
