@@ -9,23 +9,19 @@ define(['utils/utils', 'utils/deferred', 'mvc/ui/ui-misc', 'mvc/form/form-view',
     return Backbone.View.extend({
         // initialize
         initialize: function(options) {
-            // check if the user is an admin
-            var galaxy = parent.Galaxy;
-            if (galaxy && galaxy.currUser) {
-                this.is_admin = galaxy.currUser.get('is_admin');
-            } else {
-                this.is_admin = false;
-            }
+            this.options = Utils.merge(options, {});
+            this.setElement('<div/>');
 
             // create deferred processing queue handler
             // this handler reduces the number of requests to the api by filtering redundant requests
             this.deferred = new Deferred();
 
-            // set element
-            this.setElement('<div/>');
-
             // create form
-            this._buildForm(options);
+            if (options.inputs) {
+                this._buildForm(options);
+            } else {
+                this._buildModel(options, true);
+            }
         },
 
         /** Build form */
@@ -61,7 +57,7 @@ define(['utils/utils', 'utils/deferred', 'mvc/ui/ui-misc', 'mvc/form/form-view',
 
         /** Builds a new model through api call and recreates the entire form
         */
-        _buildModel: function(options) {
+        _buildModel: function(options, hide_message) {
             // link this
             var self = this;
 
@@ -69,11 +65,11 @@ define(['utils/utils', 'utils/deferred', 'mvc/ui/ui-misc', 'mvc/form/form-view',
             this.options.id = options.id;
             this.options.version = options.version;
 
-            // construct url
-            var build_url = galaxy_config.root + 'api/tools/' + options.id + '/build?';
             if (options.job_id) {
-                build_url += 'job_id=' + options.job_id;
+                build_url = Galaxy.root + 'api/jobs/' + options.job_id + '/build_for_rerun';
             } else {
+                // construct url
+                var build_url = Galaxy.root + 'api/tools/' + options.id + '/build?';
                 if (options.dataset_id) {
                     build_url += 'dataset_id=' + options.dataset_id;
                 } else {
@@ -98,7 +94,7 @@ define(['utils/utils', 'utils/deferred', 'mvc/ui/ui-misc', 'mvc/form/form-view',
                     self._buildForm(new_model['tool_model'] || new_model);
 
                     // show version message
-                    self.form.message.update({
+                    !hide_message && self.form.message.update({
                         status      : 'success',
                         message     : 'Now you are using \'' + self.options.name + '\' version ' + self.options.version + '.',
                         persistent  : false
@@ -120,13 +116,16 @@ define(['utils/utils', 'utils/deferred', 'mvc/ui/ui-misc', 'mvc/form/form-view',
                     console.debug(response);
 
                     // show error
-                    var error_message = response.error || 'Uncaught error.';
-                    self.form.modal.show({
+                    var error_message = response.error || response.err_msg || 'Uncaught error.';
+                    if (self.form == undefined){
+                        self.form = new Form();
+                    }
+                    Galaxy.modal.show({
                         title   : 'Tool cannot be executed',
                         body    : error_message,
                         buttons : {
                             'Close' : function() {
-                                self.form.modal.hide();
+                                Galaxy.modal.hide();
                             }
                         }
                     });
@@ -138,7 +137,7 @@ define(['utils/utils', 'utils/deferred', 'mvc/ui/ui-misc', 'mvc/form/form-view',
         */
         _updateModel: function() {
             // model url for request
-            var model_url = this.options.update_url || galaxy_config.root + 'api/tools/' + this.options.id + '/build';
+            var model_url = this.options.update_url || Galaxy.root + 'api/tools/' + this.options.id + '/build';
 
             // link this
             var self = this;
@@ -269,19 +268,19 @@ define(['utils/utils', 'utils/deferred', 'mvc/ui/ui-misc', 'mvc/form/form-view',
                 title   : 'Share',
                 tooltip : 'Share this tool',
                 onclick : function() {
-                    prompt('Copy to clipboard: Ctrl+C, Enter', window.location.origin + galaxy_config.root + 'root?tool_id=' + options.id);
+                    prompt('Copy to clipboard: Ctrl+C, Enter', window.location.origin + Galaxy.root + 'root?tool_id=' + options.id);
                 }
             });
 
             // add admin operations
-            if (this.is_admin) {
+            if (Galaxy.user && Galaxy.user.get('is_admin')) {
                 // create download button
                 menu_button.addMenu({
                     icon    : 'fa-download',
                     title   : 'Download',
                     tooltip : 'Download this tool',
                     onclick : function() {
-                        window.location.href = galaxy_config.root + 'api/tools/' + options.id + '/download';
+                        window.location.href = Galaxy.root + 'api/tools/' + options.id + '/download';
                     }
                 });
             }

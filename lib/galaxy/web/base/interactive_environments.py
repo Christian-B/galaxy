@@ -1,9 +1,10 @@
 import ConfigParser
 
 import os
+import stat
 import random
 import tempfile
-import subprocess
+from subprocess import Popen, PIPE
 
 from galaxy.util.bunch import Bunch
 from galaxy import web
@@ -28,7 +29,7 @@ class InteractiveEnviornmentRequest(object):
         self.attr.galaxy_config = trans.app.config
         self.attr.galaxy_root_dir = os.path.abspath(self.attr.galaxy_config.root)
         self.attr.root = web.url_for("/")
-        self.attr.app_root = self.attr.root + "plugins/visualizations/" + self.attr.viz_id + "/static/"
+        self.attr.app_root = self.attr.root + "plugins/interactive_environments/" + self.attr.viz_id + "/static/"
 
         plugin_path = os.path.abspath( plugin.path )
 
@@ -51,6 +52,13 @@ class InteractiveEnviornmentRequest(object):
         self.notebook_pw = self.generate_password(length=24)
 
         self.temp_dir = os.path.abspath( tempfile.mkdtemp() )
+        if self.attr.viz_config.getboolean("docker", "wx_tempdir"):
+            # Ensure permissions are set
+            try:
+                os.chmod( self.temp_dir, os.stat(self.temp_dir).st_mode | stat.S_IXOTH )
+            except Exception:
+                log.error( "Could not change permissions of tmpdir %s" % self.temp_dir )
+                # continue anyway
 
     def load_deploy_config(self, default_dict={}):
         # For backwards compat, any new variables added to the base .ini file
@@ -59,6 +67,8 @@ class InteractiveEnviornmentRequest(object):
         # their defaults dictionary instead.
         default_dict['command_inject'] = '--sig-proxy=true'
         default_dict['docker_hostname'] = 'localhost'
+        default_dict['wx_tempdir'] = 'False'
+        default_dict['command_wrapper'] = ''
         viz_config = ConfigParser.SafeConfigParser(default_dict)
         conf_path = os.path.join( self.attr.our_config_dir, self.attr.viz_id + ".ini" )
         if not os.path.exists( conf_path ):
@@ -172,14 +182,18 @@ class InteractiveEnviornmentRequest(object):
         conf.update(env_override)
         env_str = ' '.join(['-e "%s=%s"' % (key.upper(), item) for key, item in conf.items()])
         volume_str = ' '.join(['-v "%s"' % volume for volume in volumes])
-        return '%s run %s -d %s -p %s:%s -v "%s:/import/" %s %s' % \
+        cmd = '%s run %s -d %s -p %s:%s -v "%s:/import/" %s %s' % \
             (self.attr.viz_config.get("docker", "command"),
-            env_str,
-            self.attr.viz_config.get("docker", "command_inject"),
-            self.attr.PORT, self.attr.docker_port,
-            temp_dir,
-            volume_str,
-            self.attr.viz_config.get("docker", "image"))
+             env_str,
+             self.attr.viz_config.get("docker", "command_inject"),
+             self.attr.PORT, self.attr.docker_port,
+             temp_dir,
+             volume_str,
+             self.attr.viz_config.get("docker", "image"))
+        cmd_wrapper = self.attr.viz_config.get("docker", "command_wrapper")
+        if cmd_wrapper != '' and '{cmd}' in cmd_wrapper:
+            cmd = cmd_wrapper.format( cmd=cmd )
+        return cmd
 
     def launch(self, raw_cmd=None, env_override={}, volumes=[]):
         if raw_cmd is None:
@@ -188,4 +202,9 @@ class InteractiveEnviornmentRequest(object):
             self.attr.viz_id,
             raw_cmd
         ))
-        subprocess.call(raw_cmd, shell=True)
+        p = Popen( raw_cmd, stdout=PIPE, stderr=PIPE, close_fds=True, shell=True)
+        stdout, stderr = p.communicate()
+        if p.returncode != 0 or len(stderr):
+            log.error( "%s\n%s" % (stdout, stderr) )
+        else:
+            log.debug( "Container id: %s" % stdout)
