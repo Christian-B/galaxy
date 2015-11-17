@@ -7,6 +7,8 @@ define([
     "ui/mode-button",
     "ui/search-input"
 ], function( HISTORY_MODEL, HPANEL_EDIT, historyCopyDialog, baseMVC, ajaxQueue ){
+
+var logNamespace = 'history';
 /* ==============================================================================
 TODO:
     rendering/delayed rendering is a mess
@@ -41,8 +43,7 @@ TODO:
  */
 var HistoryPanelColumn = Backbone.View.extend( baseMVC.LoggableMixin ).extend({
 //TODO: extend from panel? (instead of aggregating)
-
-    //logger : console,
+    _logNamespace : logNamespace,
 
     tagName     : 'div',
     className   : 'history-column flex-column flex-row-container',
@@ -84,29 +85,28 @@ var HistoryPanelColumn = Backbone.View.extend( baseMVC.LoggableMixin ).extend({
             // a more useful attribute, but does not account for collections (for some reason)
             // hdaCount = _.chain( this.model.get( 'state_ids' ) ).values().flatten().value().length,
             empty = panel.model.get( 'empty' ),
-            newMsg,
+            newMsg = panel.emptyMsg,
             $emptyMsg = panel.$emptyMessage( $whereTo );
 
         if( !_.isEmpty( panel.hdaViews ) ){
             return $emptyMsg.hide();
         }
 
-        if( empty ){
-            newMsg = panel.emptyMsg;
+        if( !empty ){
+            if( !this.model.contents.length ){
+                newMsg = '<span class="fa fa-spinner fa-spin"></span> <i>' + _l( 'loading datasets' ) + '...</i>';
 
-        } else if( !this.model.contents.length ){
-            newMsg = '<span class="fa fa-spinner fa-spin"></span> <i>' + _l( 'loading datasets' ) + '...</i>';
+            } if( panel.searchFor ){
+                // this is a hack until HDCAs implement searching and haveDetails entirely
+                var mixed = !!panel.model.contents.find( function( c ){
+                    return c.get( 'model_class' ) !== 'HistoryDatasetAssociation';
+                });
+                if( !mixed && !panel.model.contents.haveDetails() ){
+                    newMsg = '<span class="fa fa-spinner fa-spin"></span> <i>' + _l( 'searching' ) + '...</i>';
 
-        } if( panel.searchFor ){
-            // this is a hack until HDCAs implement searching and haveDetails entirely
-            var mixed = !!panel.model.contents.find( function( c ){
-                return c.get( 'model_class' ) !== 'HistoryDatasetAssociation';
-            });
-            if( !mixed && !panel.model.contents.haveDetails() ){
-                newMsg = '<span class="fa fa-spinner fa-spin"></span> <i>' + _l( 'searching' ) + '...</i>';
-
-            } else {
-                newMsg = panel.noneFoundMsg;
+                } else {
+                    newMsg = panel.noneFoundMsg;
+                }
             }
         }
         return $emptyMsg.empty().append( newMsg ).show();
@@ -308,8 +308,8 @@ var HistoryPanelColumn = Backbone.View.extend( baseMVC.LoggableMixin ).extend({
 /** @class A view of a HistoryCollection and displays histories similarly to the current history panel.
  */
 var MultiPanelColumns = Backbone.View.extend( baseMVC.LoggableMixin ).extend({
+    _logNamespace : logNamespace,
 
-    //logger : console,
     className : 'multi-panel-history',
 
     // ------------------------------------------------------------------------ set up
@@ -589,7 +589,9 @@ var MultiPanelColumns = Backbone.View.extend( baseMVC.LoggableMixin ).extend({
                 multipanel._dropData = null;
 
                 var queue = new ajaxQueue.NamedAjaxQueue();
-                toCopy.forEach( function( content ){
+                // need to reverse to better match expected order
+                // TODO: reconsider order in list-panel._setUpItemViewListeners, dragstart (instead of here)
+                toCopy.reverse().forEach( function( content ){
                     queue.add({
                         name : 'copy-' + content.id,
                         fn : function(){

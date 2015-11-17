@@ -7,8 +7,6 @@ API operations on a jobs.
 import json
 import logging
 
-from galaxy import eggs
-eggs.require('SQLAlchemy')
 from sqlalchemy import and_, false, or_
 from sqlalchemy.orm import aliased
 
@@ -204,12 +202,10 @@ class JobController( BaseAPIController, UsesLibraryMixinItems ):
         job = self.__get_job(trans, id)
         if not job:
             raise exceptions.ObjectNotFound("Could not access job with id '%s'" % id)
-        tool_id = job.tool_id
-        tool_version = job.tool_version
-        tool = self.app.toolbox.get_tool( tool_id, tool_version )
+        tool = self.app.toolbox.get_tool( job.tool_id, job.tool_version )
         if not tool.is_workflow_compatible:
-            raise exceptions.ConfigDoesNotAllowException( "Tool '%s' cannot be rerun." % ( tool_id ) )
-        return tool.to_json(trans, kwd={'__job_id__' : id})
+            raise exceptions.ConfigDoesNotAllowException( "Tool '%s' cannot be rerun." % ( job.tool_id ) )
+        return tool.to_json(trans, {}, job=job)
 
     def __dictify_associations( self, trans, *association_lists ):
         rval = []

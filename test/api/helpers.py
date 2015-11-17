@@ -83,7 +83,10 @@ class BaseDatasetPopulator( object ):
             raise
 
     def wait_for_job( self, job_id, assert_ok=False, timeout=DEFAULT_TIMEOUT ):
-        return wait_on_state( lambda: self._get( "jobs/%s" % job_id ), assert_ok=assert_ok, timeout=timeout )
+        return wait_on_state( lambda: self.get_job_details( job_id ), assert_ok=assert_ok, timeout=timeout )
+
+    def get_job_details( self, job_id, full=False ):
+        return self._get( "jobs/%s?full=%s" % (job_id, full) )
 
     def _summarize_history_errors( self, history_id ):
         pass
@@ -440,7 +443,7 @@ class DatasetCollectionPopulator( BaseDatasetCollectionPopulator ):
         return create_response
 
 
-def wait_on_state( state_func, assert_ok=False, timeout=5 ):
+def wait_on_state( state_func, assert_ok=False, timeout=DEFAULT_TIMEOUT ):
     def get_state( ):
         response = state_func()
         assert response.status_code == 200, "Failed to fetch state update while waiting."

@@ -18,8 +18,6 @@ from itertools import ifilter
 from string import Template
 from uuid import UUID, uuid4
 
-from galaxy import eggs
-eggs.require('SQLAlchemy')
 from sqlalchemy import and_, func, not_, or_, true, join, select
 from sqlalchemy.orm import joinedload, object_session, aliased
 from sqlalchemy.ext import hybrid
@@ -101,7 +99,7 @@ class HasName:
         return name
 
 
-class HasJobMetrics:
+class JobLike:
 
     def _init_metrics( self ):
         self.text_metrics = []
@@ -131,6 +129,18 @@ class HasJobMetrics:
     def metrics( self ):
         # TODO: Make iterable, concatenate with chain
         return self.text_metrics + self.numeric_metrics
+
+    def set_streams( self, stdout, stderr ):
+        stdout = galaxy.util.unicodify( stdout )
+        stderr = galaxy.util.unicodify( stderr )
+        if ( len( stdout ) > galaxy.util.DATABASE_MAX_STRING_SIZE ):
+            stdout = galaxy.util.shrink_string_by_size( stdout, galaxy.util.DATABASE_MAX_STRING_SIZE, join_by="\n..\n", left_larger=True, beginning_on_size_error=True )
+            log.info( "stdout for %s %d is greater than %s, only a portion will be logged to database", type(self), self.id, galaxy.util.DATABASE_MAX_STRING_SIZE_PRETTY )
+        self.stdout = stdout
+        if ( len( stderr ) > galaxy.util.DATABASE_MAX_STRING_SIZE ):
+            stderr = galaxy.util.shrink_string_by_size( stderr, galaxy.util.DATABASE_MAX_STRING_SIZE, join_by="\n..\n", left_larger=True, beginning_on_size_error=True )
+            log.info( "stderr for %s %d is greater than %s, only a portion will be logged to database", type(self), self.id, galaxy.util.DATABASE_MAX_STRING_SIZE_PRETTY )
+        self.stderr = stderr
 
 
 class User( object, Dictifiable ):
@@ -203,6 +213,9 @@ class User( object, Dictifiable ):
         self.disk_usage = bytes
 
     total_disk_usage = property( get_disk_usage, set_disk_usage )
+
+    def adjust_total_disk_usage( self, amount ):
+        self.disk_usage = func.coalesce(self.table.c.disk_usage, 0) + amount
 
     @property
     def nice_total_disk_usage( self ):
@@ -306,7 +319,7 @@ class TaskMetricNumeric( BaseJobMetric ):
     pass
 
 
-class Job( object, HasJobMetrics, Dictifiable ):
+class Job( object, JobLike, Dictifiable ):
     dict_collection_visible_keys = [ 'id', 'state', 'exit_code', 'update_time', 'create_time' ]
     dict_element_visible_keys = [ 'id', 'state', 'exit_code', 'update_time', 'create_time'  ]
 
@@ -355,6 +368,7 @@ class Job( object, HasJobMetrics, Dictifiable ):
         self.destination_id = None
         self.destination_params = None
         self.post_job_actions = []
+        self.state_history = []
         self.imported = False
         self.handler = None
         self.exit_code = None
@@ -656,7 +670,7 @@ class Job( object, HasJobMetrics, Dictifiable ):
             self.workflow_invocation_step.update()
 
 
-class Task( object, HasJobMetrics ):
+class Task( object, JobLike ):
     """
     A task represents a single component of a job.
     """
@@ -1103,7 +1117,7 @@ class History( object, Dictifiable, UsesAnnotations, HasName ):
             if set_hid:
                 dataset.hid = self._next_hid()
         if quota and self.user:
-            self.user.total_disk_usage += dataset.quota_amount( self.user )
+            self.user.adjust_total_disk_usage(dataset.quota_amount(self.user))
         dataset.history = self
         if genome_build not in [None, '?']:
             self.genome_build = genome_build
@@ -1510,7 +1524,13 @@ class DefaultHistoryPermissions( object ):
         self.role = role
 
 
-class Dataset( object ):
+class StorableObject( object ):
+
+    def __init__( self, id, **kwargs):
+        self.id = id
+
+
+class Dataset( StorableObject ):
     states = Bunch( NEW='new',
                     UPLOAD='upload',
                     QUEUED='queued',
@@ -1547,7 +1567,7 @@ class Dataset( object ):
     engine = None
 
     def __init__( self, id=None, state=None, external_filename=None, extra_files_path=None, file_size=None, purgable=True, uuid=None ):
-        self.id = id
+        super(Dataset, self).__init__(id=id)
         self.state = state
         self.deleted = False
         self.purged = False
@@ -2375,7 +2395,7 @@ class HistoryDatasetAssociationSubset( object ):
 class Library( object, Dictifiable, HasName ):
     permitted_actions = get_permitted_actions( filter='LIBRARY' )
     dict_collection_visible_keys = ( 'id', 'name' )
-    dict_element_visible_keys = ( 'id', 'deleted', 'name', 'description', 'synopsis', 'root_folder_id' )
+    dict_element_visible_keys = ( 'id', 'deleted', 'name', 'description', 'synopsis', 'root_folder_id', 'create_time' )
 
     def __init__( self, name=None, description=None, synopsis=None, root_folder=None ):
         self.name = name or "Unnamed library"
@@ -2920,7 +2940,7 @@ class ImplicitlyConvertedDatasetAssociation( object ):
             try:
                 os.unlink( self.file_name )
             except Exception, e:
-                print "Failed to purge associated file (%s) from disk: %s" % ( self.file_name, e )
+                log.error( "Failed to purge associated file (%s) from disk: %s" % ( self.file_name, e ) )
 
 
 DEFAULT_COLLECTION_NAME = "Unnamed Collection"
@@ -3483,7 +3503,7 @@ class WorkflowInvocation( object, Dictifiable ):
     def active( self ):
         """ Indicates the workflow invocation is somehow active - and in
         particular valid actions may be performed on its
-        ``WorkflowInvocationStep``s.
+        WorkflowInvocationSteps.
         """
         states = WorkflowInvocation.states
         return self.state in [ states.NEW, states.READY ]
@@ -3677,9 +3697,10 @@ class WorkflowRequestToInputDatasetCollectionAssociation(object, Dictifiable):
     dict_collection_visible_keys = ['id', 'workflow_invocation_id', 'workflow_step_id', 'dataset_collection_id', 'name' ]
 
 
-class MetadataFile( object ):
+class MetadataFile( StorableObject ):
 
     def __init__( self, dataset=None, name=None ):
+        super(MetadataFile, self).__init__(id=None)
         if isinstance( dataset, HistoryDatasetAssociation ):
             self.history_dataset = dataset
         elif isinstance( dataset, LibraryDatasetDatasetAssociation ):
