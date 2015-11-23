@@ -62,3 +62,9 @@ ecdsa==0.13
 #
 # https://bitbucket.org/mchaput/whoosh/pull-requests/50/fix-lru-thread-safety/diff
 Whoosh==2.4.1+gx1
+
+# Added by Christian
+twill==1.8.0
+lxml==3.5.0
+cssselect==0.9.1
+NoseHTML==0.4.2
