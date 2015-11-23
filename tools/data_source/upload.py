@@ -6,6 +6,7 @@
 
 import codecs
 import gzip
+import logging
 import os
 import shutil
 import sys
@@ -38,6 +39,7 @@ except:
 
 assert sys.version_info[:2] >= ( 2, 4 )
 
+log = logging.getLogger(__name__)
 
 def stop_err( msg, ret=1 ):
     sys.stderr.write( msg )
@@ -80,6 +82,7 @@ def parse_outputs( args ):
 
 
 def add_file( dataset, registry, json_file, output_path ):
+    log.info("add_file with %s",dataset)
     data_type = None
     line_count = None
     converted_path = None
@@ -347,6 +350,7 @@ def add_file( dataset, registry, json_file, output_path ):
         # Groom the dataset content if necessary
         datatype.groom_dataset_content( output_path )
 
+    log.info("ext %s", ext)
 
 def add_composite_file( dataset, json_file, output_path, files_path ):
         if dataset.composite_files:
@@ -393,6 +397,8 @@ def output_adjacent_tmpdir( output_path ):
 
 
 def __main__():
+    logging.basicConfig(filename='/home/christian/Dropbox/Manchester/galaxy_shed_tools/repr_tools/thelog.log',level=logging.INFO)
+    log.info("upload.main() called")
 
     if len( sys.argv ) < 4:
         print >>sys.stderr, 'usage: upload.py <root> <datatypes_conf> <json paramfile> <output spec> ...'
