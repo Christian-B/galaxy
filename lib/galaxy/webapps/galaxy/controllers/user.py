@@ -8,8 +8,8 @@ import os
 import random
 import socket
 import urllib
-
 from datetime import datetime, timedelta
+from json import dumps, loads
 
 from markupsafe import escape
 from sqlalchemy import and_, or_, true, func
@@ -17,12 +17,12 @@ from sqlalchemy import and_, or_, true, func
 from galaxy import model
 from galaxy import util
 from galaxy import web
+from galaxy.exceptions import ObjectInvalid
 from galaxy.security.validate_user_input import (transform_publicname,
                                                  validate_email,
                                                  validate_password,
                                                  validate_publicname)
 from galaxy.util import biostar, hash_util, docstring_trim, listify
-from galaxy.util.json import dumps, loads
 from galaxy.web import url_for
 from galaxy.web.base.controller import (BaseUIController,
                                         CreatesApiKeysMixin,
@@ -30,8 +30,6 @@ from galaxy.web.base.controller import (BaseUIController,
                                         UsesFormDefinitionsMixin)
 from galaxy.web.form_builder import build_select_field, CheckboxField
 from galaxy.web.framework.helpers import grids, time_ago
-from galaxy.exceptions import ObjectInvalid
-
 
 log = logging.getLogger( __name__ )
 
@@ -79,7 +77,7 @@ class User( BaseUIController, UsesFormDefinitionsMixin, CreatesUsersMixin, Creat
     installed_len_files = None
 
     @web.expose
-    def index( self, trans, cntrller, **kwd ):
+    def index( self, trans, cntrller='user', **kwd ):
         return trans.fill_template( '/user/index.mako', cntrller=cntrller )
 
     @web.expose
@@ -788,7 +786,8 @@ class User( BaseUIController, UsesFormDefinitionsMixin, CreatesUsersMixin, Creat
                     subject = 'Join Mailing List'
                     try:
                         util.send_mail( frm, to, subject, body, trans.app.config )
-                    except:
+                    except Exception:
+                        log.exception( 'Subscribing to the mailing list has failed.' )
                         error = "Now logged in as " + user.email + ". However, subscribing to the mailing list has failed."
             if not error and not is_admin:
                 # The handle_user_login() method has a call to the history_set_default_permissions() method
@@ -847,7 +846,8 @@ class User( BaseUIController, UsesFormDefinitionsMixin, CreatesUsersMixin, Creat
         try:
             util.send_mail( frm, to, subject, body, trans.app.config )
             return True
-        except:
+        except Exception:
+            log.exception( 'Unable to send the activation email.' )
             return False
 
     def prepare_activation_link( self, trans, email ):

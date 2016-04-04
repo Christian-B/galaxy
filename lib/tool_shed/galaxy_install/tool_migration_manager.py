@@ -11,6 +11,7 @@ import logging
 
 from galaxy import util
 from galaxy.tools.toolbox import ToolSection
+from galaxy.tools.toolbox.parser import ensure_tool_conf_item
 from galaxy.util.odict import odict
 
 from tool_shed.galaxy_install import install_manager
@@ -272,7 +273,7 @@ class ToolMigrationManager( object ):
                         proprietary_tool_config = section_elem.get( 'file' )
                         if tool_config == proprietary_tool_config:
                             # The tool is loaded inside of the section_elem.
-                            tool_sections.append( ToolSection( proprietary_tool_panel_elem ) )
+                            tool_sections.append( ToolSection( ensure_tool_conf_item( proprietary_tool_panel_elem ) ) )
                             if not is_displayed:
                                 is_displayed = True
         return is_displayed, tool_sections
@@ -289,7 +290,7 @@ class ToolMigrationManager( object ):
                     filename = basic_util.strip_path( name )
                     if filename == tool_config_filename:
                         full_path = str( os.path.abspath( os.path.join( root, name ) ) )
-                        tool = self.toolbox.load_tool( full_path )
+                        tool = self.toolbox.load_tool( full_path, use_cached=False )
                         return suc.generate_tool_guid( repository_clone_url, tool )
         # Not quite sure what should happen here, throw an exception or what?
         return None
@@ -580,7 +581,7 @@ class ToolMigrationManager( object ):
                                    owner=self.repository_owner,
                                    changeset_revision=tool_shed_repository.installed_changeset_revision )
                     pathspec = [ 'repository', 'get_tool_versions' ]
-                    text = common_util.tool_shed_get( self.app, self.tool_shed_url, pathspec=pathspec, params=params )
+                    text = util.url_get( self.tool_shed_url, password_mgr=self.app.tool_shed_registry.url_auth( self.tool_shed_url ), pathspec=pathspec, params=params )
                     if text:
                         tool_version_dicts = json.loads( text )
                         tvm.handle_tool_versions( tool_version_dicts, tool_shed_repository )
